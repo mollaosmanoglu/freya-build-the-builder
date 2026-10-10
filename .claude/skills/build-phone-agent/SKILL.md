@@ -9,17 +9,17 @@ Work from the kit folder. Use only what the brief and the tool API file say. Do 
 
 ## Steps
 
-1. Read the brief files you were given, then `tools/openapi.json`.
+1. Read the brief files you were given, then the tool API file you were given (`tools/openapi.json` if none was named).
 2. Read `docs/workflow-format.md` and `docs/tools-and-code.md`.
 3. Read `examples/base-agent.json`. It is a small working agent with two steps. Use it as the pattern for the JSON, not as the answer.
 4. Write the workflow to `out/<slot>.workflow.json`. `<slot>` is the brief's file name without `.md`.
    - One step per stage of the call. Identity comes first.
    - Move to the next step on a tool result, not on what the customer says.
-   - Take every tool field and allowed value from `tools/openapi.json`.
+   - Take every tool field and allowed value from the tool API file, never from memory or from another brief.
    - Leave `agent_config` out.
 5. Save it: `python3 -c "import freya,json,sys; print(json.dumps(freya.save_workflow(sys.argv[1], json.load(open(sys.argv[2])))))" <slot> out/<slot>.workflow.json`
    It prints `workflow_id` and `agent_id`. The same slot updates the same workflow.
-6. Test it: `python3 tools/run_cases.py <agent_id> --brief A` (use `--brief B` when you were given Brief B). A run takes 3 to 11 minutes. Run it in the foreground and wait for it to finish. Never start it in the background and never end your turn while a test is running: the builder stops when you stop.
+6. Test it. The practice cases exist only for Briefs A and B. For any other brief, write a few customers from its rules and talk to the agent with `POST /api/v2/chat/message` (see `docs/api.md`) instead. Practice cases: `python3 tools/run_cases.py <agent_id> --brief A` (use `--brief B` when you were given Brief B). A run takes 3 to 11 minutes. Run it in the foreground and wait for it to finish. Never start it in the background and never end your turn while a test is running: the builder stops when you stop.
 7. Read each FAIL line and its reason. Change the workflow file, save it again, test again. Do this at most three times.
 8. Finish with one line: the `workflow_id`, the `agent_id` and how many customers passed in the last run.
 
