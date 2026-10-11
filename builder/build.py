@@ -9,7 +9,7 @@ passes the two paths on.
 Needs FREYA_API_KEY and FREYA_BANK_TEAM_KEY (see env.example) and a Claude login or ANTHROPIC_API_KEY.
 Optional: set LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL to also send the run to Langfuse (builder/tracing.py).
 """
-import asyncio, atexit, contextlib, dataclasses, json, os, pathlib, shutil, sys, tempfile, time
+import asyncio, atexit, contextlib, dataclasses, json, os, pathlib, shutil, signal, sys, tempfile, time
 
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, ToolUseBlock, query
 
@@ -68,31 +68,35 @@ async def main(brief_path, tool_api_path):
         root = attrs = contextlib.nullcontext()
 
     trace_id = None
-    with root as span, attrs, trace.open("w") as out:
-        trace_id, rec = (lf.get_current_trace_id(), tracing.Recorder(lf, prompt)) if lf else (None, None)
-        out.write(json.dumps({"start": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "brief": str(brief), "tool_api": str(api), "model": options.model, "prompt_version": PROMPT_VERSION}) + "\n")
-        async for message in query(prompt=prompt, options=options):
-            if rec: rec.message(message)
-            out.write(json.dumps({"type": type(message).__name__, **dataclasses.asdict(message)}, default=str) + "\n")
-            out.flush()
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        print(block.text, flush=True)
-                    elif isinstance(block, ToolUseBlock):
-                        print(f"  [{block.name}] {str(block.input)[:120]}", flush=True)
-            elif isinstance(message, ResultMessage):
-                print(f"\nend {time.strftime('%Y-%m-%dT%H:%M:%S%z')}: {message.num_turns} turns, {message.duration_ms / 1000:.0f} s. Trace: {trace}", flush=True)
-                if span is not None:
-                    span.update(output=message.result, metadata={"turns": message.num_turns, "cost_usd": message.total_cost_usd},
-                                **({"level": "ERROR", "status_message": message.subtype} if message.is_error else {}))
+    rec = None
+    try:
+        with root as span, attrs, trace.open("w") as out:
+            trace_id, rec = (lf.get_current_trace_id(), tracing.Recorder(lf, prompt)) if lf else (None, None)
+            out.write(json.dumps({"start": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "brief": str(brief), "tool_api": str(api), "model": options.model, "prompt_version": PROMPT_VERSION}) + "\n")
+            async for message in query(prompt=prompt, options=options):
+                if rec: rec.message(message)
+                out.write(json.dumps({"type": type(message).__name__, **dataclasses.asdict(message)}, default=str) + "\n")
+                out.flush()
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            print(block.text, flush=True)
+                        elif isinstance(block, ToolUseBlock):
+                            print(f"  [{block.name}] {str(block.input)[:120]}", flush=True)
+                elif isinstance(message, ResultMessage):
+                    print(f"\nend {time.strftime('%Y-%m-%dT%H:%M:%S%z')}: {message.num_turns} turns, {message.duration_ms / 1000:.0f} s. Trace: {trace}", flush=True)
+                    if span is not None:
+                        span.update(output=message.result, metadata={"turns": message.num_turns, "cost_usd": message.total_cost_usd},
+                                    **({"level": "ERROR", "status_message": message.subtype} if message.is_error else {}))
+    finally:                                        # also on Ctrl-C or a kill, so a stopped build keeps its trace
         if rec: rec.close()
-    if lf:
-        lf.flush()                                  # a short-lived script must flush or the trace never leaves
-        print(f"langfuse trace: {lf.get_trace_url(trace_id=trace_id)}", flush=True)
+        if lf:
+            lf.flush()                              # a short-lived script must flush or the trace never leaves
+            print(f"langfuse trace: {lf.get_trace_url(trace_id=trace_id)}", flush=True)
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     asyncio.run(main(sys.argv[1], sys.argv[2]))
