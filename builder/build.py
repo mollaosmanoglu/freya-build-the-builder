@@ -22,6 +22,7 @@ KIT = pathlib.Path(__file__).resolve().parent.parent
 SANDBOX_FILES = ["docs/workflow-format.md", "docs/tools-and-code.md", "docs/api.md", "freya.py",
                  "tools/run_cases.py", "tools/score.py", "public-test-set.json"]
 STATE_FILES = [".freya-agents.json", ".personas.json"]       # ids of the workflows and test customers, copied in and back out
+TIME_LIMIT_MIN = float(os.environ.get("BUILDER_TIME_LIMIT_MIN", "28"))   # Freya stops a builder at 30 minutes
 PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v0")      # builder/prompts/<version>.md; change the file's version, never edit a released one
 
 
@@ -70,24 +71,27 @@ async def main(brief_path, tool_api_path):
     trace_id = None
     rec = None
     try:
-        with root as span, attrs, trace.open("w") as out:
-            trace_id, rec = (lf.get_current_trace_id(), tracing.Recorder(lf, prompt)) if lf else (None, None)
-            out.write(json.dumps({"start": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "brief": str(brief), "tool_api": str(api), "model": options.model, "prompt_version": PROMPT_VERSION}) + "\n")
-            async for message in query(prompt=prompt, options=options):
-                if rec: rec.message(message)
-                out.write(json.dumps({"type": type(message).__name__, **dataclasses.asdict(message)}, default=str) + "\n")
-                out.flush()
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            print(block.text, flush=True)
-                        elif isinstance(block, ToolUseBlock):
-                            print(f"  [{block.name}] {str(block.input)[:120]}", flush=True)
-                elif isinstance(message, ResultMessage):
-                    print(f"\nend {time.strftime('%Y-%m-%dT%H:%M:%S%z')}: {message.num_turns} turns, {message.duration_ms / 1000:.0f} s. Trace: {trace}", flush=True)
-                    if span is not None:
-                        span.update(output=message.result, metadata={"turns": message.num_turns, "cost_usd": message.total_cost_usd},
-                                    **({"level": "ERROR", "status_message": message.subtype} if message.is_error else {}))
+        async with asyncio.timeout(TIME_LIMIT_MIN * 60):
+            with root as span, attrs, trace.open("w") as out:
+                trace_id, rec = (lf.get_current_trace_id(), tracing.Recorder(lf, prompt)) if lf else (None, None)
+                out.write(json.dumps({"start": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "brief": str(brief), "tool_api": str(api), "model": options.model, "prompt_version": PROMPT_VERSION}) + "\n")
+                async for message in query(prompt=prompt, options=options):
+                    if rec: rec.message(message)
+                    out.write(json.dumps({"type": type(message).__name__, **dataclasses.asdict(message)}, default=str) + "\n")
+                    out.flush()
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                print(block.text, flush=True)
+                            elif isinstance(block, ToolUseBlock):
+                                print(f"  [{block.name}] {str(block.input)[:120]}", flush=True)
+                    elif isinstance(message, ResultMessage):
+                        print(f"\nend {time.strftime('%Y-%m-%dT%H:%M:%S%z')}: {message.num_turns} turns, {message.duration_ms / 1000:.0f} s. Trace: {trace}", flush=True)
+                        if span is not None:
+                            span.update(output=message.result, metadata={"turns": message.num_turns, "cost_usd": message.total_cost_usd},
+                                        **({"level": "ERROR", "status_message": message.subtype} if message.is_error else {}))
+    except TimeoutError:
+        print(f"\nstopped at the {TIME_LIMIT_MIN:g}-minute limit; the last deployed workflow is the result", flush=True)
     finally:                                        # also on Ctrl-C or a kill, so a stopped build keeps its trace
         if rec: rec.close()
         if lf:
