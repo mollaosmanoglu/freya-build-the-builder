@@ -30,6 +30,9 @@ async def main(brief_path, tool_api_path):
     # lives on Freya (ids in .freya-agents.json), so nothing needed is lost; the build's record is in the trace and in Langfuse.
     for old in ("out", "results"):
         shutil.rmtree(KIT / old, ignore_errors=True)
+    for f in (KIT / "traces").glob("*"):          # earlier build logs, except the hidden-*.log files that get submitted
+        if f.is_file() and not f.name.startswith("hidden-"):
+            f.unlink()
     trace = KIT / "traces" / (stamp + ".jsonl")
     trace.parent.mkdir(exist_ok=True)
     options = ClaudeAgentOptions(
