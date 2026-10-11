@@ -1,3 +1,39 @@
+# OFZ: a builder that gets out of the way
+
+Team OFZ, Faruk Catak (farukcatak_@outlook.com). Our entry for Freya's Build the Builder hackathon. The rest of this README, from "Build the Builder" down, is the organisers' kit.
+
+## The idea
+
+Most builders turn the bank's documents into a fixed format and generate the phone agent from it with their own code. Ours does the opposite: it gives Claude (Fable, maximum effort, every tool) a short goal, the bank's material and Freya's docs, and lets it read, design, build, test and fix the phone agent on its own within the 30 minutes. No skill file, no generator, no fixed design. A format written for the practice briefs cannot break on a case that looks nothing like them.
+
+## Run it
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp env.example env.sh && source env.sh      # Freya keys; Claude login or ANTHROPIC_API_KEY
+.venv/bin/python builder/build.py {brief_or_case_folder} {tool_api_file_or_service_url} 2>&1 | tee traces/<name>.log
+```
+
+## What is ours
+
+| Path | What it is |
+|---|---|
+| `builder/build.py` | The builder. Copies only the brief, Freya's docs and helpers into a throwaway folder, runs Claude there with the prompt, stops at 30 minutes, keeps a full trace (`traces/*.jsonl`, plus Langfuse when configured) |
+| `builder/prompts/v2.md` | The whole instruction: the goal, the scoring rule, the deadline and where things are. About 20 lines |
+| `mock/` | The final case's bank services on Cloudflare Workers, serving exactly `test-customers.json`. `mock/check.py` replays every entry against the live address (617/617) |
+| `tools/final_test.py` | Simulated Turkish callers against the final phone agent, each scenario 3 times. Testing only; it changes nothing |
+| `submission/`, `traces/final.log`, `submission.json` | The final-case submission |
+
+## Final case
+
+```bash
+python3 builder/build.py {case_folder} https://freya-bank-mock-fable.freya-faruk.workers.dev
+```
+
+Mock: https://freya-bank-mock-fable.freya-faruk.workers.dev (health check at `/health`).
+
+---
+
 # Build the Builder
 
 **Kit version 3** (10 October 2026). The file `VERSION` holds the number. When we update the kit, the number goes up and the changes are listed here.
