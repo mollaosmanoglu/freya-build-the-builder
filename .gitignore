@@ -13,4 +13,6 @@ out/
 # practice traces stay local; the hidden-brief traces (traces/hidden-*.log) are submitted, so they are committed
 traces/*
 !traces/hidden-*.log
+!traces/final.log
+!traces/20261011-105512.jsonl
 customers/

@@ -1,0 +1,10 @@
+{
+  "team": "TEAM NAME",
+  "members": [{ "name": "Faruk Catak", "email": "faruk@luphra.com" }],
+  "repo": "https://github.com/mollaosmanoglu/freya-build-the-builder",
+  "commit": "352e651",
+  "run_command": "python3 builder/build.py {case_folder} https://freya-bank-mock-fable.freya-faruk.workers.dev 2>&1 | tee traces/final.log",
+  "workflow": "submission/final.workflow.json",
+  "trace": "traces/final.log",
+  "mock_url": "https://freya-bank-mock-fable.freya-faruk.workers.dev"
+}
