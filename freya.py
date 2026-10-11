@@ -13,10 +13,16 @@ def api(method, path, body=None, **params):
     """Call the API and return the `result` part of its {success, data: {message, result}} envelope."""
     q = "?" + urllib.parse.urlencode(params) if params else ""
     req = urllib.request.Request(URL + path + q, data=json.dumps(body).encode() if body is not None else None, headers=HEADERS, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r: out = json.load(r)
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"{method} {path} -> {e.code}: {e.read().decode()[:1500]}") from None
+    for attempt in range(4):         # Freya answers 5xx now and then; the same request usually works a few seconds later
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r: out = json.load(r)
+            break
+        except urllib.error.HTTPError as e:
+            if e.code < 500 or attempt == 3:
+                raise RuntimeError(f"{method} {path} -> {e.code}: {e.read().decode()[:1500]}") from None
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 3: raise
+        time.sleep(10)
     return out.get("data", {}).get("result", out) if isinstance(out, dict) else out
 
 _ws = None
