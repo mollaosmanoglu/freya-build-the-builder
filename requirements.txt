@@ -1,1 +1,2 @@
 claude-agent-sdk
+langfuse            # optional: tracing, only used when LANGFUSE_* keys are set (builder/tracing.py)
