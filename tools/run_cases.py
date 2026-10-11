@@ -55,20 +55,23 @@ def main():
     # a persona is recreated whenever its text changes, so an edited case never runs with a stale customer
     spec = {c["id"]: persona_for(c, ident[c["id"]], a.style) for c in cases}
     key = {i: i + ":" + hashlib.sha1(json.dumps(p, sort_keys=True).encode()).hexdigest()[:10] for i, p in spec.items()}
-    new = [c for c in cases if key[c["id"]] not in ids]
+    # All reps run in ONE simulation, every call at once: each (case, rep) is its own copy of the persona with its own customer,
+    # so the bank ledgers of the reps stay separate. Three reps then take about as long as one.
+    items = [(c, r) for r in range(a.reps) for c in cases]
+    pkey = {(c["id"], r): f"{c['id']}:r{r}:" + key[c["id"]].split(":")[1] for c, r in items}
+    new = [(c, r) for c, r in items if pkey[(c["id"], r)] not in ids]
     if new:
-        made = freya.create_personas([spec[c["id"]] for c in new])["personas"]
-        ids.update({key[c["id"]]: p["id"] for c, p in zip(new, made)}); json.dump(ids, open(store, "w"), indent=1)
-    ids = {c["id"]: ids[key[c["id"]]] for c in cases}
+        made = freya.create_personas([spec[c["id"]] for c, r in new])["personas"]
+        ids.update({pkey[(c["id"], r)]: p["id"] for (c, r), p in zip(new, made)}); json.dump(ids, open(store, "w"), indent=1)
+    pid = {k: ids[v] for k, v in pkey.items()}
     (ROOT / "results").mkdir(exist_ok=True)
-    reps, total_s = [], 0
-    for rep in range(a.reps):
-        for attempt in range(1 + a.rerun_if_slow):                   # organisers: a run made while the model was slow is thrown away and repeated
-            rows, sim_id, it_id, status, took, med = run_once(a.agent_id, cases, ids)
-            if med <= 10 or attempt == a.rerun_if_slow: break
-            print(f"-- run discarded: median slowest turn {med:.0f} s. Waiting 5 minutes, then repeating it.\n", flush=True); time.sleep(300)
-        reps.append(rows); total_s += took
-        if a.reps > 1: print(f"-- run {rep + 1} of {a.reps}: {sum(r['pass'] for r in rows)} / {len(rows)} passed, {took:.0f} s\n")
+    for attempt in range(1 + a.rerun_if_slow):                   # organisers: a run made while the model was slow is thrown away and repeated
+        rows, sim_id, it_id, status, total_s, med = run_once(a.agent_id, items, pid)
+        if med <= 10 or attempt == a.rerun_if_slow: break
+        print(f"-- run discarded: median slowest turn {med:.0f} s. Waiting 5 minutes, then repeating it.\n", flush=True); time.sleep(300)
+    reps = [rows[r * len(cases):(r + 1) * len(cases)] for r in range(a.reps)]
+    if a.reps > 1:
+        for r, rr in enumerate(reps): print(f"-- run {r + 1} of {a.reps}: {sum(x['pass'] for x in rr)} / {len(rr)} passed")
     need = a.reps                                                # a customer counts only when every run passes
     final = [{"id": c["id"], "family": c["family"], "passes": sum(r[k]["pass"] for r in reps), "runs": a.reps, "pass": sum(r[k]["pass"] for r in reps) >= need} for k, c in enumerate(cases)]
     n = sum(f["pass"] for f in final)
@@ -81,30 +84,35 @@ def main():
         pathlib.Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         json.dump({"agent_id": a.agent_id, "simulation_id": sim_id, "iteration_id": it_id, "seconds": round(total_s), "passed": n, "total": len(final), "runs": a.reps, "final": final, "rows": reps[-1], "all_rows": reps}, open(a.out, "w"), indent=1)
 
-def run_once(agent_id, cases, ids):
-    """One simulation: every case once. Returns the scored rows."""
-    sessions = {c["id"]: http("/v1/practice/sessions", {"case": c["id"]})["variables"] for c in cases}
+def run_once(agent_id, items, pid):
+    """One simulation: every (case, rep) once, all calls at the same time. Returns the scored rows in the order of items."""
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(16)
+    sessions = dict(zip([(c["id"], r) for c, r in items], pool.map(lambda cr: http("/v1/practice/sessions", {"case": cr[0]["id"]})["variables"], items)))
     t0 = time.time()
-    sim_id, it_id, status = freya.run_simulation(agent_id, f"cases {time.strftime('%H:%M:%S')}", {ids[c["id"]]: sessions[c["id"]] for c in cases})
+    sim_id, it_id, status = freya.run_simulation(agent_id, f"cases {time.strftime('%H:%M:%S')}", {pid[(c["id"], r)]: sessions[(c["id"], r)] for c, r in items},
+                                                 concurrency=min(len(items), int(os.environ.get("FREYA_SIM_CONCURRENCY", "30"))))
     took = time.time() - t0
     judge = {r["personaId"]: r for r in freya.get_iteration(sim_id, it_id)["runs"]}
+    ledgers = list(pool.map(lambda cr: http("/v1/practice/ledger/" + sessions[(cr[0]["id"], cr[1])]["customer_id"]), items))
     rows = []
-    for c in cases:
-        led = http("/v1/practice/ledger/" + sessions[c["id"]]["customer_id"])
+    for (c, rep), led in zip(items, ledgers):
         r = score_ledger(c, led)
-        j = judge.get(ids[c["id"]], {})                      # the conversation checks, read from the transcript by the judge model
+        j = judge.get(pid[(c["id"], rep)], {})                      # the conversation checks, read from the transcript by the judge model
         if j.get("outcome") != "pass": r["failed"].append("conversation: " + " ".join(str(j.get("reason") or "no verdict").split())[:400])
         r["pass"] = not r["failed"]
-        rows.append({"id": c["id"], "level": c["level"], "family": c["family"], "pass": r["pass"], "failed": r["failed"], "call_id": j.get("callId"), "tools": [x["tool"] for x in led["calls"]], "customer_id": sessions[c["id"]]["customer_id"]})
-        print(("PASS" if r["pass"] else "FAIL"), c["id"], f"{c['level']:<6}", f"{c['family']:<14}", "|", " > ".join(x["tool"].replace("verify_identity", "verify").replace("create_promise", "promise") for x in led["calls"]) or "(no tool calls)")
+        rows.append({"id": c["id"], "level": c["level"], "family": c["family"], "pass": r["pass"], "failed": r["failed"], "call_id": j.get("callId"), "tools": [x["tool"] for x in led["calls"]], "customer_id": sessions[(c["id"], rep)]["customer_id"]})
+        print(("PASS" if r["pass"] else "FAIL"), c["id"], f"{c['level']:<6}", f"{c['family']:<14}", "|", " > ".join(x["tool"].replace("verify_identity", "verify").replace("create_promise", "promise") for x in led["calls"]) or "(no tool calls)", f"[run {rep + 1}]" if max(r for _, r in items) else "")
         for f in r["failed"]: print("       -", f[:260])
     # How long the phone agent kept the customer waiting. A call whose customer hung up after long silences says
     # something about the speed of the model at that moment, not only about the agent.
+    def fetch(r):
+        if not r["call_id"]: return None
+        try: return freya.get_call(r["call_id"])
+        except Exception: return None
     waits = []
-    for r in rows:
-        if not r["call_id"]: continue
-        try: call = freya.get_call(r["call_id"])
-        except Exception: continue
+    for r, call in zip(rows, pool.map(fetch, rows)):
+        if call is None: continue
         last_user, worst = None, 0.0
         for m in call.get("messages", []):
             t = m.get("secondsFromStart")

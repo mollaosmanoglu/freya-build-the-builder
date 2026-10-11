@@ -53,7 +53,7 @@ async def main(brief_path, tool_api_path):
         permission_mode="dontAsk",
         max_turns=150,
         setting_sources=[],
-        env={"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1", "PWD": str(box), "FREYA_SIM_CONCURRENCY": "10"}   # run all practice customers at once (kit default is 5),
+        env={"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1", "PWD": str(box), "FREYA_SIM_CONCURRENCY": "30"}   # run all practice customers at once (kit default is 5),
     )
     prompt = (KIT / "builder" / "prompts" / f"{PROMPT_VERSION}.md").read_text().replace("{brief}", str(brief)).replace("{api}", str(api))
     print(f"start {time.strftime('%Y-%m-%dT%H:%M:%S%z')} brief={brief_in} tool_api={api_in} model={options.model} sandbox={box}", flush=True)

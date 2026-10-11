@@ -99,7 +99,7 @@ def run_simulation(agent_id, name, variables_by_persona, max_seconds=420, concur
             print("another simulation is running in this workspace, waiting 30 s", flush=True); time.sleep(30)
     sim_id = (sim.get("simulation") or sim)["id"]
     while True:
-        time.sleep(10)
+        time.sleep(3)
         s = api("GET", f"/api/v2/simulations/{sim_id}"); s = s.get("simulation") or s
         if s.get("status") in ("completed", "failed", "paused"): break
     its = api("GET", f"/api/v2/simulations/{sim_id}/iterations"); its = its.get("iterations") or its.get("items") or its
