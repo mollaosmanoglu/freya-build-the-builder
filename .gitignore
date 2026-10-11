@@ -13,4 +13,3 @@ out/
 # practice traces stay local; the hidden-brief traces (traces/hidden-*.log) are submitted, so they are committed
 traces/*
 !traces/hidden-*.log
-archive/

@@ -9,7 +9,7 @@ passes the two paths on.
 Needs FREYA_API_KEY and FREYA_BANK_TEAM_KEY (see env.example) and a Claude login or ANTHROPIC_API_KEY.
 Optional: set LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL to also send the run to Langfuse (builder/tracing.py).
 """
-import asyncio, contextlib, dataclasses, json, os, pathlib, sys, time
+import asyncio, contextlib, dataclasses, json, os, pathlib, shutil, sys, time
 
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, ToolUseBlock, query
 
@@ -26,11 +26,10 @@ async def main(brief_path, tool_api_path):
         if not p.is_file():
             sys.exit(f"not a file: {p}")
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    # Start every build clean: leftovers from an earlier brief must not leak into this one. Moved, not deleted.
+    # Start every build clean: leftovers from an earlier build or brief must not leak into this one. The phone agent itself
+    # lives on Freya (ids in .freya-agents.json), so nothing needed is lost; the build's record is in the trace and in Langfuse.
     for old in ("out", "results"):
-        if (KIT / old).exists():
-            (KIT / "archive" / stamp).mkdir(parents=True, exist_ok=True)
-            (KIT / old).rename(KIT / "archive" / stamp / old)
+        shutil.rmtree(KIT / old, ignore_errors=True)
     trace = KIT / "traces" / (stamp + ".jsonl")
     trace.parent.mkdir(exist_ok=True)
     options = ClaudeAgentOptions(
