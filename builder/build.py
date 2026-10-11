@@ -56,12 +56,10 @@ async def main(brief_path, tool_api_path):
     options = ClaudeAgentOptions(
         cwd=box,
         model=os.environ.get("BUILDER_MODEL", "claude-fable-5-1"),
-        effort=os.environ.get("BUILDER_EFFORT", "high"),           # low, medium, high or max
-        allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
-        permission_mode="dontAsk",
-        max_turns=150,
+        effort=os.environ.get("BUILDER_EFFORT", "max"),            # low, medium, high or max
+        permission_mode="bypassPermissions",                      # every tool, no prompts; the time limit is the only bound
         setting_sources=[],
-        env={"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1", "PWD": str(box), "FREYA_SIM_CONCURRENCY": "30"}   # run all practice customers at once (kit default is 5),
+        env={"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000", "PWD": str(box), "FREYA_SIM_CONCURRENCY": "30"}   # run all practice customers at once (kit default is 5)
     )
     prompt = (KIT / "builder" / "prompts" / f"{PROMPT_VERSION}.md").read_text().replace("{brief}", str(brief)).replace("{api}", str(api)).replace("{minutes}", f"{TIME_LIMIT_MIN:g}").replace("{deadline}", time.strftime("%H:%M:%S %Z", time.localtime(time.time() + TIME_LIMIT_MIN * 60)))
     print(f"start {time.strftime('%Y-%m-%dT%H:%M:%S%z')} brief={brief_in} tool_api={api_in} model={options.model} effort={options.effort} sandbox={box}", flush=True)
