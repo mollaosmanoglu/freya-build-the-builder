@@ -23,7 +23,7 @@ SANDBOX_FILES = ["docs/workflow-format.md", "docs/tools-and-code.md", "docs/api.
                  "tools/run_cases.py", "tools/score.py", "public-test-set.json"]
 STATE_FILES = [".freya-agents.json", ".personas.json"]       # ids of the workflows and test customers, copied in and back out
 TIME_LIMIT_MIN = float(os.environ.get("BUILDER_TIME_LIMIT_MIN", "30"))   # Freya allows 30 minutes per brief, self-tests included
-PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v1")      # builder/prompts/<version>.md; change the file's version, never edit a released one
+PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v2")      # builder/prompts/<version>.md; change the file's version, never edit a released one
 
 
 async def main(brief_path, tool_api_path):
