@@ -49,7 +49,7 @@ async def main(brief_path, tool_api_path):
     trace.parent.mkdir(exist_ok=True)
     options = ClaudeAgentOptions(
         cwd=box,
-        model=os.environ.get("BUILDER_MODEL", "claude-opus-5-5"),
+        model=os.environ.get("BUILDER_MODEL", "claude-fable-5-1"),
         allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
         permission_mode="dontAsk",
         max_turns=150,
