@@ -20,7 +20,11 @@ def post(service, data):
         with urllib.request.urlopen(req, timeout=30) as r:
             return r.status, json.loads(r.read())
     except urllib.error.HTTPError as e:
-        return e.code, json.loads(e.read())
+        text = e.read().decode(errors="replace")
+        try:
+            return e.code, json.loads(text)
+        except ValueError:
+            return e.code, {"raw": text[:200]}
 
 
 cases = []
@@ -37,9 +41,9 @@ for c in DATA["customers"]:
             for week, e in weeks.items():
                 cases.append((svc, {"cardNumber": card, "newStatementWeek": int(week), "statementDay": 5}, e))
 
-with ThreadPoolExecutor(20) as pool:
+with ThreadPoolExecutor(8) as pool:
     results = list(pool.map(lambda c: post(c[0], c[1]), cases))
-bad = [(c[0], c[1], r[0]) for c, r in zip(cases, results) if r != (c[2]["http"], c[2]["response"])]
+bad = [(c[0], c[1], r[0], r[1].get("raw", "")) for c, r in zip(cases, results) if r != (c[2]["http"], c[2]["response"])]
 print(f"{len(cases) - len(bad)}/{len(cases)} entries match")
 for b in bad:
     print("MISMATCH", b)
