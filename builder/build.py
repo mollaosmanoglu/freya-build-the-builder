@@ -22,7 +22,7 @@ KIT = pathlib.Path(__file__).resolve().parent.parent
 SANDBOX_FILES = ["docs/workflow-format.md", "docs/tools-and-code.md", "docs/api.md", "freya.py",
                  "tools/run_cases.py", "tools/score.py", "public-test-set.json"]
 STATE_FILES = [".freya-agents.json", ".personas.json"]       # ids of the workflows and test customers, copied in and back out
-TIME_LIMIT_MIN = float(os.environ.get("BUILDER_TIME_LIMIT_MIN", "28"))   # Freya stops a builder at 30 minutes
+TIME_LIMIT_MIN = float(os.environ.get("BUILDER_TIME_LIMIT_MIN", "30"))   # Freya allows 30 minutes per brief, self-tests included
 PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v1")      # builder/prompts/<version>.md; change the file's version, never edit a released one
 
 
