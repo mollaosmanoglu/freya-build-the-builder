@@ -56,7 +56,7 @@ async def main(brief_path, tool_api_path):
     trace_id = None
     with root as span, attrs, trace.open("w") as out:
         trace_id, rec = (lf.get_current_trace_id(), tracing.Recorder(lf, prompt)) if lf else (None, None)
-        out.write(json.dumps({"start": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "brief": str(brief), "tool_api": str(api), "model": options.model}) + "\n")
+        out.write(json.dumps({"start": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "brief": str(brief), "tool_api": str(api), "model": options.model, "prompt_version": PROMPT_VERSION}) + "\n")
         async for message in query(prompt=prompt, options=options):
             if rec: rec.message(message)
             out.write(json.dumps({"type": type(message).__name__, **dataclasses.asdict(message)}, default=str) + "\n")
