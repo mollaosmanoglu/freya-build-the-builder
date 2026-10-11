@@ -37,11 +37,11 @@ async def main(brief_path, tool_api_path):
         if (KIT / f).exists():
             (box / f).parent.mkdir(parents=True, exist_ok=True); shutil.copy(KIT / f, box / f)
     agents = box / ".freya-agents.json"
-    if agents.exists():               # every build starts from the base workflow only, never from an earlier build's agent
-        agents.write_text(json.dumps({k: v for k, v in json.loads(agents.read_text()).items() if k == "base"}, indent=1))
+    agents.write_text("{}")           # every build creates its own workflow; a shared slot lets parallel or later builds overwrite each other
     (box / "brief").mkdir()
     def cleanup():                    # runs however the build ends: keep the ids, throw the rest away
         if agents.exists():
+            print(f"created on Freya: {agents.read_text()}", flush=True)
             kept = json.loads((KIT / agents.name).read_text()) if (KIT / agents.name).exists() else {}
             (KIT / agents.name).write_text(json.dumps(kept | json.loads(agents.read_text()), indent=1))
         for f in STATE_FILES:
