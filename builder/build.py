@@ -17,7 +17,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import tracing
 
 KIT = pathlib.Path(__file__).resolve().parent.parent
-PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v1")      # builder/prompts/<version>.md; change the file's version, never edit a released one
+PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v0")      # builder/prompts/<version>.md; change the file's version, never edit a released one
 
 
 async def main(brief_path, tool_api_path):
