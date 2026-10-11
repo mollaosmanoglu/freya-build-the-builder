@@ -48,7 +48,7 @@ async def main(brief_path, tool_api_path):
     if lf:
         from langfuse import propagate_attributes
         root = lf.start_as_current_observation(as_type="agent", name="build-phone-agent", input={"brief": brief.name, "tool_api": api.name})
-        attrs = propagate_attributes(session_id=f"build-{stamp}", tags=["builder", "claude-agent-sdk", f"prompt-{PROMPT_VERSION}"], version=PROMPT_VERSION,
+        attrs = propagate_attributes(session_id=f"build-{stamp}", user_id=os.environ.get("BUILDER_OWNER"), tags=["builder", "claude-agent-sdk", f"prompt-{PROMPT_VERSION}"], version=PROMPT_VERSION,
                                      metadata={"brief": brief.name, "model": options.model, "prompt_version": PROMPT_VERSION, "local_trace": trace.name})
     else:
         root = attrs = contextlib.nullcontext()
