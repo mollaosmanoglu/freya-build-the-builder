@@ -124,6 +124,8 @@ def run_once(agent_id, items, pid):
         waits.sort(); med = waits[len(waits) // 2]; hung = sum(r.get("ended") == "customer-ended-call" and not r["pass"] for r in rows)
         print(f"\nslowest agent turn per call: median {med:.0f} s, worst {waits[-1]:.0f} s. Failed calls where the customer hung up: {hung}.")
         if med > 10: print("WARNING: the phone agent was slow in this run. If the same agent is fast in another run, the model was busy and this score is too low.")
+    if rows and not any(r["tools"] for r in rows):
+        print("WARNING: no call made a single tool call. That is a Freya outage, not a fault in the agent: do not change the workflow, wait a minute and run again.")
     return rows, sim_id, it_id, status, took, (med if waits else 0)
 
 if __name__ == "__main__": main()
