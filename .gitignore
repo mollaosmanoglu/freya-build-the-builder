@@ -15,4 +15,6 @@ traces/*
 !traces/hidden-*.log
 !traces/final.log
 !traces/20261011-105512.jsonl
+!traces/20261011-113441.jsonl
+!traces/final-1.log
 customers/
