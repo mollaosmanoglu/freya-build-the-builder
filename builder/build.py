@@ -23,7 +23,7 @@ SANDBOX_FILES = ["docs/workflow-format.md", "docs/tools-and-code.md", "docs/api.
                  "tools/run_cases.py", "tools/score.py", "public-test-set.json"]
 STATE_FILES = [".freya-agents.json", ".personas.json"]       # ids of the workflows and test customers, copied in and back out
 TIME_LIMIT_MIN = float(os.environ.get("BUILDER_TIME_LIMIT_MIN", "28"))   # Freya stops a builder at 30 minutes
-PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v0")      # builder/prompts/<version>.md; change the file's version, never edit a released one
+PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v1")      # builder/prompts/<version>.md; change the file's version, never edit a released one
 
 
 async def main(brief_path, tool_api_path):
@@ -63,7 +63,7 @@ async def main(brief_path, tool_api_path):
         setting_sources=[],
         env={"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1", "PWD": str(box), "FREYA_SIM_CONCURRENCY": "30"}   # run all practice customers at once (kit default is 5),
     )
-    prompt = (KIT / "builder" / "prompts" / f"{PROMPT_VERSION}.md").read_text().replace("{brief}", str(brief)).replace("{api}", str(api))
+    prompt = (KIT / "builder" / "prompts" / f"{PROMPT_VERSION}.md").read_text().replace("{brief}", str(brief)).replace("{api}", str(api)).replace("{minutes}", f"{TIME_LIMIT_MIN:g}")
     print(f"start {time.strftime('%Y-%m-%dT%H:%M:%S%z')} brief={brief_in} tool_api={api_in} model={options.model} effort={options.effort} sandbox={box}", flush=True)
 
     lf = tracing.setup()
