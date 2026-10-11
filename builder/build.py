@@ -9,7 +9,7 @@ passes the two paths on.
 Needs FREYA_API_KEY and FREYA_BANK_TEAM_KEY (see env.example) and a Claude login or ANTHROPIC_API_KEY.
 Optional: set LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL to also send the run to Langfuse (builder/tracing.py).
 """
-import asyncio, contextlib, dataclasses, json, os, pathlib, shutil, sys, time
+import asyncio, atexit, contextlib, dataclasses, json, os, pathlib, shutil, sys, tempfile, time
 
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, ToolUseBlock, query
 
@@ -17,6 +17,11 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import tracing
 
 KIT = pathlib.Path(__file__).resolve().parent.parent
+# The only files of the kit the agent gets to see. It works in a throwaway copy, so hackathon docs, other briefs, examples and
+# earlier results are simply not there.
+SANDBOX_FILES = ["docs/workflow-format.md", "docs/tools-and-code.md", "docs/api.md", "freya.py",
+                 "tools/run_cases.py", "tools/score.py", "public-test-set.json"]
+STATE_FILES = [".freya-agents.json", ".personas.json"]       # ids of the workflows and test customers, copied in and back out
 PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v0")      # builder/prompts/<version>.md; change the file's version, never edit a released one
 
 
@@ -26,25 +31,32 @@ async def main(brief_path, tool_api_path):
         if not p.is_file():
             sys.exit(f"not a file: {p}")
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    # Start every build clean: leftovers from an earlier build or brief must not leak into this one. The phone agent itself
-    # lives on Freya (ids in .freya-agents.json), so nothing needed is lost; the build's record is in the trace and in Langfuse.
-    for old in ("out", "results"):
-        shutil.rmtree(KIT / old, ignore_errors=True)
-    for f in (KIT / "traces").glob("*"):          # earlier build logs, except the hidden-*.log files that get submitted
-        if f.is_file() and not f.name.startswith("hidden-"):
-            f.unlink()
+    box = pathlib.Path(tempfile.mkdtemp(prefix="freya-build-"))
+    for f in SANDBOX_FILES + STATE_FILES:
+        if (KIT / f).exists():
+            (box / f).parent.mkdir(parents=True, exist_ok=True); shutil.copy(KIT / f, box / f)
+    (box / "brief").mkdir()
+    def cleanup():                    # runs however the build ends: keep the ids, throw the rest away
+        for f in STATE_FILES:
+            if (box / f).exists(): shutil.copy(box / f, KIT / f)
+        shutil.rmtree(box, ignore_errors=True)
+    atexit.register(cleanup)
+    brief_in, api_in = brief, api
+    brief, api = box / "brief" / brief_in.name, box / "brief" / api_in.name
+    shutil.copy(brief_in, brief); shutil.copy(api_in, api)
     trace = KIT / "traces" / (stamp + ".jsonl")
     trace.parent.mkdir(exist_ok=True)
     options = ClaudeAgentOptions(
-        cwd=KIT,
+        cwd=box,
         model=os.environ.get("BUILDER_MODEL", "claude-opus-5-5"),
         allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
         permission_mode="dontAsk",
         max_turns=150,
-        env={"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"},
+        setting_sources=[],
+        env={"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1", "PWD": str(box), "FREYA_SIM_CONCURRENCY": "10"}   # run all practice customers at once (kit default is 5),
     )
     prompt = (KIT / "builder" / "prompts" / f"{PROMPT_VERSION}.md").read_text().replace("{brief}", str(brief)).replace("{api}", str(api))
-    print(f"start {time.strftime('%Y-%m-%dT%H:%M:%S%z')} brief={brief} tool_api={api} model={options.model}", flush=True)
+    print(f"start {time.strftime('%Y-%m-%dT%H:%M:%S%z')} brief={brief_in} tool_api={api_in} model={options.model} sandbox={box}", flush=True)
 
     lf = tracing.setup()
     if lf:
