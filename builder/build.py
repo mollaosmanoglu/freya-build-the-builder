@@ -2,9 +2,12 @@
 
     python3 builder/build.py {brief_path} {tool_api_path} 2>&1 | tee traces/<name>.log
 
-Same approach as examples/agent_builder.py (Claude Agent SDK), but the instructions are a versioned prompt (builder/prompts/) instead of a skill, and it takes the tool API file
+The brief can be a file or a folder of bank material. The tool API can be a file, a folder, or the address where the bank's
+services are served.
+
+Same approach as examples/agent_builder.py (Claude Agent SDK), but the instructions are a versioned prompt (builder/prompts/) instead of a skill, and it takes the tool API
 as an argument, because every hidden brief comes with its own. Nothing from any brief is written into this file: it only
-passes the two paths on.
+passes the two on.
 
 Needs FREYA_API_KEY and FREYA_BANK_TEAM_KEY (see env.example) and a Claude login or ANTHROPIC_API_KEY.
 Optional: set LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL to also send the run to Langfuse (builder/tracing.py).
@@ -27,10 +30,12 @@ PROMPT_VERSION = os.environ.get("BUILDER_PROMPT_VERSION", "v2")      # builder/p
 
 
 async def main(brief_path, tool_api_path):
-    brief, api = pathlib.Path(brief_path).resolve(), pathlib.Path(tool_api_path).resolve()
-    for p in (brief, api):
-        if not p.is_file():
-            sys.exit(f"not a file: {p}")
+    brief = pathlib.Path(brief_path).resolve()
+    is_url = tool_api_path.startswith(("http://", "https://"))
+    api = tool_api_path if is_url else pathlib.Path(tool_api_path).resolve()
+    for p in (brief,) if is_url else (brief, api):
+        if not p.exists():
+            sys.exit(f"not found: {p}")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     box = pathlib.Path(tempfile.mkdtemp(prefix="freya-build-"))
     for f in SANDBOX_FILES + STATE_FILES:
@@ -49,8 +54,12 @@ async def main(brief_path, tool_api_path):
         shutil.rmtree(box, ignore_errors=True)
     atexit.register(cleanup)
     brief_in, api_in = brief, api
-    brief, api = box / "brief" / brief_in.name, box / "brief" / api_in.name
-    shutil.copy(brief_in, brief); shutil.copy(api_in, api)
+    def copy_in(src):
+        dst = box / "brief" / src.name
+        shutil.copytree(src, dst) if src.is_dir() else shutil.copy(src, dst)
+        return dst
+    brief = copy_in(brief_in)
+    api = api_in if is_url else copy_in(api_in)
     trace = KIT / "traces" / (stamp + ".jsonl")
     trace.parent.mkdir(exist_ok=True)
     options = ClaudeAgentOptions(
@@ -67,7 +76,7 @@ async def main(brief_path, tool_api_path):
     lf = tracing.setup()
     if lf:
         from langfuse import propagate_attributes
-        root = lf.start_as_current_observation(as_type="agent", name="build-phone-agent", input={"brief": brief.name, "tool_api": api.name})
+        root = lf.start_as_current_observation(as_type="agent", name="build-phone-agent", input={"brief": brief.name, "tool_api": str(api_in)})
         attrs = propagate_attributes(session_id=f"build-{stamp}", user_id=os.environ.get("BUILDER_OWNER"), tags=["builder", "claude-agent-sdk", f"prompt-{PROMPT_VERSION}"], version=PROMPT_VERSION,
                                      metadata={"brief": brief.name, "model": options.model, "prompt_version": PROMPT_VERSION, "local_trace": trace.name})
     else:
